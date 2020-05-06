@@ -1,0 +1,99 @@
+# Default values for fluentd.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+image:
+  repository: fluent/fluentd-kubernetes-daemonset
+  version: v1-debian-elasticsearch
+  pullPolicy: IfNotPresent
+
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  # Specifies whether a service account should be created
+  create: true
+  # Annotations to add to the service account
+  annotations: {}
+  # The name of the service account to use.
+  # If not set and create is true, a name is generated using the fullname template
+  name:
+
+rbac:
+  create: true
+
+env:
+  - name:  FLUENT_ELASTICSEARCH_HOST
+    value: "elasticsearch.example.com"
+  - name:  FLUENT_ELASTICSEARCH_PORT
+    value: "9200"
+  - name: FLUENT_ELASTICSEARCH_SCHEME
+    value: "http"
+  - name: FLUENT_ELASTICSEARCH_SSL_VERIFY
+    value: "false"
+  - name: FLUENT_ELASTICSEARCH_SSL_VERSION
+    value: "TLSv1_2"
+  - name: FLUENT_ELASTICSEARCH_USER
+    value: ""
+  - name: FLUENT_ELASTICSEARCH_PASSWORD
+    value: ""
+  - name: FLUENT_ELASTICSEARCH_LOGSTASH_PREFIX
+    value: "k8s"
+
+customConfig: |-
+  <system>
+    rpc_endpoint 127.0.0.1:24444
+  </system>
+
+  <filter kubernetes.**>
+    @type kubernetes_metadata
+    annotation_match [ "fluentd.+" ]
+    kubernetes_url "#{ENV['FLUENT_FILTER_KUBERNETES_URL'] || 'https://' + ENV.fetch('KUBERNETES_SERVICE_HOST') + ':' + ENV.fetch('KUBERNETES_SERVICE_PORT') + '/api'}"
+    verify_ssl "#{ENV['KUBERNETES_VERIFY_SSL'] || true}"
+    ca_file "#{ENV['KUBERNETES_CA_FILE']}"
+  </filter>
+
+configMapMounts:
+  - name: customconf
+    mountPath: /fluentd/etc/conf.d
+    readOnly: true
+
+volumes:
+  - name: customconf
+    configMap:
+      name: fluentd
+
+configmapReload:
+  image:
+    repository: jimmidyson/configmap-reload
+    version: v0.3.0
+  resources: {}
+  volumeDirs:
+    - /etc/config
+  configMapMounts:
+    - name: customconf
+      mountPath: /etc/config
+      readOnly: true
+
+podSecurityContext: {}
+  # fsGroup: 2000
+
+securityContext: {}
+  # capabilities:
+  #   drop:
+  #   - ALL
+  # readOnlyRootFilesystem: true
+  # runAsNonRoot: true
+  # runAsUser: 1000
+
+resources: {}
+  # We usually recommend not to specify default resources and to leave this as a conscious
+  # choice for the user. This also increases chances charts run on environments with little
+  # resources, such as Minikube. If you do want to specify resources, uncomment the following
+  # lines, adjust them as necessary, and remove the curly braces after 'resources:'.
+  # limits:
+  #   cpu: 100m
+  #   memory: 128Mi
+  # requests:
+  #   cpu: 100m
+  #   memory: 128Mi

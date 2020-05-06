@@ -1,0 +1,70 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: {{ include "fluentd.fullname" . }}
+  labels:
+    {{- include "fluentd.labels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "fluentd.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "fluentd.selectorLabels" . | nindent 8 }}
+    spec:
+      serviceAccountName: {{ include "fluentd.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      tolerations:
+      - key: node-role.kubernetes.io/master
+        effect: NoSchedule
+      containers:
+        - name: {{ .Chart.Name }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.version }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+          {{- with .Values.env }}
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+          - name: varlog
+            mountPath: /var/log
+          - name: varlibdockercontainers
+            mountPath: /var/lib/docker/containers
+            readOnly: true
+          {{- with .Values.configMapMounts }}
+          {{- toYaml . | nindent 10 }}
+          {{- end }}
+
+        - name: {{ .Chart.Name }}-configmap-reload
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.configmapReload.image.repository }}:{{ .Values.configmapReload.image.version }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          resources:
+            {{- toYaml .Values.configmapReload.resources | nindent 12 }}
+          args:
+            - --webhook-url=http://127.0.0.1:24444/api/config.reload
+          {{- range .Values.configmapReload.volumeDirs }}
+            - --volume-dir={{ . }}
+          {{- end }}
+          volumeMounts:
+          {{- with .Values.configmapReload.configMapMounts }}
+          {{- toYaml . | nindent 10 }}
+          {{- end }}
+
+      volumes:
+        - name: varlog
+          hostPath:
+            path: /var/log
+        - name: varlibdockercontainers
+          hostPath:
+            path: /var/lib/docker/containers
+        {{- with .Values.volumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
